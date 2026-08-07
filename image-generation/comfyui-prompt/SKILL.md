@@ -27,7 +27,16 @@ Help the user generate and **run** ComfyUI API prompts against the local ComfyUI
 
 ## Base URL
 
-`http://localhost:8188`
+Default: `http://localhost:8188`
+
+Override per machine by setting `COMFYUI_BASE_URL` in a `.env.local` file at the project root. The skill and command use this value when present.
+
+Example `.env.local`:
+```bash
+COMFYUI_BASE_URL=http://your-comfyui-host:8188
+```
+
+Do not commit `.env.local` to git.
 
 ## Required models for the bundled `z-image-turbo` workflow
 
@@ -118,7 +127,7 @@ To submit a prompt and wait for completion, use this procedure:
 2. Generate a unique `client_id`, e.g. `claude-<timestamp>`.
 3. POST to `/prompt`:
    ```bash
-   curl -s -X POST http://localhost:8188/prompt \
+   curl -s -X POST ${COMFYUI_BASE_URL:-http://localhost:8188}/prompt \
      -H "Content-Type: application/json" \
      -d @- <<'JSON'
    {"prompt": <prompt_json>, "client_id": "<client_id>"}
@@ -134,25 +143,25 @@ Useful endpoints:
 
 ```bash
 # System and device info
-curl -s http://localhost:8188/system_stats | python3 -m json.tool
+curl -s ${COMFYUI_BASE_URL:-http://localhost:8188}/system_stats | python3 -m json.tool
 
 # All available node classes and their inputs/outputs
-curl -s http://localhost:8188/object_info | python3 -m json.tool
+curl -s ${COMFYUI_BASE_URL:-http://localhost:8188}/object_info | python3 -m json.tool
 
 # Specific node schema
-curl -s http://localhost:8188/object_info/CheckpointLoaderSimple | python3 -m json.tool
-curl -s http://localhost:8188/object_info/KSampler | python3 -m json.tool
+curl -s ${COMFYUI_BASE_URL:-http://localhost:8188}/object_info/CheckpointLoaderSimple | python3 -m json.tool
+curl -s ${COMFYUI_BASE_URL:-http://localhost:8188}/object_info/KSampler | python3 -m json.tool
 
 # Installed models (may be empty for Comfy Desktop shared paths)
-curl -s http://localhost:8188/api/models/checkpoints | python3 -m json.tool
-curl -s http://localhost:8188/api/models/loras | python3 -m json.tool
+curl -s ${COMFYUI_BASE_URL:-http://localhost:8188}/api/models/checkpoints | python3 -m json.tool
+curl -s ${COMFYUI_BASE_URL:-http://localhost:8188}/api/models/loras | python3 -m json.tool
 
 # Built-in workflow templates
-curl -s http://localhost:8188/api/workflow_templates | python3 -m json.tool
+curl -s ${COMFYUI_BASE_URL:-http://localhost:8188}/api/workflow_templates | python3 -m json.tool
 
 # Queue and history
-curl -s http://localhost:8188/queue | python3 -m json.tool
-curl -s http://localhost:8188/history | python3 -m json.tool
+curl -s ${COMFYUI_BASE_URL:-http://localhost:8188}/queue | python3 -m json.tool
+curl -s ${COMFYUI_BASE_URL:-http://localhost:8188}/history | python3 -m json.tool
 ```
 
 ## Connection syntax

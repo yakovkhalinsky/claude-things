@@ -11,7 +11,7 @@ allowed-tools:
 
 # /comfy-prompt
 
-Generate a ComfyUI API prompt from the user's description and submit it directly to `http://localhost:8188`.
+Generate a ComfyUI API prompt from the user's description and submit it to the configured ComfyUI server.
 
 ## Steps
 
@@ -44,7 +44,7 @@ Generate a ComfyUI API prompt from the user's description and submit it directly
 9. Submit to ComfyUI:
    ```bash
    CLIENT_ID="claude-$(date +%s)"
-   curl -s -X POST http://localhost:8188/prompt \
+   curl -s -X POST ${COMFYUI_BASE_URL:-http://localhost:8188}/prompt \
      -H "Content-Type: application/json" \
      -d "{\"prompt\": $(cat /tmp/comfy_prompt.json), \"client_id\": \"${CLIENT_ID}\"}" \
      | python3 -m json.tool

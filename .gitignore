@@ -4,6 +4,11 @@
 *.db-journal
 *.db-wal
 
+# Local environment overrides
+.env
+.env.local
+.env.*.local
+
 # OS / editor
 .DS_Store
 Thumbs.db

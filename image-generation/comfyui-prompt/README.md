@@ -12,7 +12,7 @@ A Claude Code skill that turns natural-language image-generation requests into C
 ## Requirements
 
 - Claude Code launched from this project directory.
-- A ComfyUI server reachable at `http://localhost:8188`.
+- A ComfyUI server reachable at `http://localhost:8188` by default, or configure a different host via `COMFYUI_BASE_URL` in `.env.local`.
 - For the bundled `z-image-turbo` template, the model files listed below.
 
 ## Setup
@@ -44,7 +44,13 @@ If the filenames in your local install differ, edit `workflows/z-image-turbo.jso
 
 ### 3. Start ComfyUI
 
-Launch ComfyUI so it is reachable at `http://localhost:8188`. If your host is different (for example, ComfyUI on another machine), change the base URL in `SKILL.md` / `command.md` or export `COMFYUI_BASE_URL`.
+Launch ComfyUI so it is reachable at `http://localhost:8188`. If your host is different (for example, ComfyUI on another machine), create a `.env.local` file at the project root:
+
+```bash
+COMFYUI_BASE_URL=http://your-comfyui-host:8188
+```
+
+The skill and command will use this value automatically. Do not commit `.env.local` to git.
 
 ### 4. Load the project into Claude Code
 
