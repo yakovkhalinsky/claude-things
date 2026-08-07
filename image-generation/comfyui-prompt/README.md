@@ -62,7 +62,7 @@ Open this project directory in Claude Code, then restart it so the local skill a
 |------|---------|
 | `SKILL.md` | Claude Code skill definition |
 | `command.md` | Claude Code slash command `/comfy-prompt` |
-| `SERVE.md` | Claude Code slash command `/serve-examples` (opt-in local file server) |
+| `command-serve-output.md` | Claude Code slash command `/comfyui-serve-output` (opt-in local file server) |
 | `workflows/z-image-turbo.json` | Example AuraFlow/Lumina2 turbo workflow |
 | `examples/` | Local example outputs (not committed; generated on demand) |
 

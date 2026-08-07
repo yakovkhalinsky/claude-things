@@ -7,7 +7,7 @@ allowed-tools:
   - Write
 ---
 
-# /serve-examples
+# /comfyui-serve-output
 
 Start a lightweight local HTTP server so you can browse example outputs in a browser. This is **opt-in**; nothing is served unless you run this command.
 
@@ -30,7 +30,7 @@ Start a lightweight local HTTP server so you can browse example outputs in a bro
 ## Example
 
 ```text
-/serve-examples 8765
+/comfyui-serve-output 8765
 ```
 
 Assistant:
