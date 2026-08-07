@@ -1,0 +1,1 @@
+../../../image-generation/comfyui-prompt/SKILL.md
