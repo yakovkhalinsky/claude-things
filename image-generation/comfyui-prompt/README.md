@@ -61,7 +61,7 @@ Open this project directory in Claude Code, then restart it so the local skill a
 | File | Purpose |
 |------|---------|
 | `SKILL.md` | Claude Code skill definition |
-| `command.md` | Claude Code slash command `/comfy-prompt` |
+| `comfyui-prompt.md` | Claude Code slash command `/comfyui-prompt` |
 | `command-serve-output.md` | Claude Code slash command `/comfyui-serve-output` (opt-in local file server) |
 | `workflows/z-image-turbo.json` | Example AuraFlow/Lumina2 turbo workflow |
 | `examples/` | Local example outputs (not committed; generated on demand) |
@@ -77,9 +77,9 @@ Generate a polar bear in a 1950s diner using the z-image-turbo template.
 Or use the companion slash command:
 
 ```text
-/comfy-prompt a polar bear in a 1950s diner eating a burger and fries
+/comfyui-prompt a polar bear in a 1950s diner eating a burger and fries
 ```
 
 ## See also
 
-- `command.md` — the slash-command version in this same asset folder.
+- `comfyui-prompt.md` — the slash-command version in this same asset folder.

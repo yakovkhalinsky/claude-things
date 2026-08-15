@@ -1,0 +1,20 @@
+#!/usr/bin/env bash
+# shortcut script for running different agents with ollama
+
+AGENT="${1:-claude}"
+MODEL="${2:-$(cat ~/.model 2>/dev/null)}"
+
+# Only skip permissions for claude
+if [[ "$AGENT" == "claude" ]]; then
+  POST="-y -- --dangerously-skip-permissions"
+else
+  POST="-y"
+fi
+
+CMD="ollama launch ${AGENT} ${POST}"
+
+if [[ -n "$MODEL" ]]; then
+  CMD="ollama launch ${AGENT} --model ${MODEL} ${POST}"
+fi
+
+eval "$CMD"

@@ -9,7 +9,7 @@ allowed-tools:
   - mcp__eden-memory__eden_remember
 ---
 
-# /comfy-prompt
+# /comfyui-prompt
 
 Generate a ComfyUI API prompt from the user's description and submit it to the configured ComfyUI server.
 
@@ -62,7 +62,7 @@ Generate a ComfyUI API prompt from the user's description and submit it to the c
 ## Example interaction
 
 ```text
-/comfy-prompt a polar bear sitting in a 60s diner eating a burger and fries
+/comfyui-prompt a polar bear sitting in a 60s diner eating a burger and fries
 ```
 
 Assistant:

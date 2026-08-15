@@ -16,10 +16,10 @@ mkdir -p "${ROOT}/.claude/commands"
 cp "${ROOT}/image-generation/comfyui-prompt/SKILL.md" \
    "${ROOT}/.claude/skills/comfyui-prompt/SKILL.md"
 
-cp "${ROOT}/image-generation/comfyui-prompt/command.md" \
-   "${ROOT}/.claude/commands/comfy-prompt.md"
+cp "${ROOT}/image-generation/comfyui-prompt/comfyui-prompt.md" \
+   "${ROOT}/.claude/commands/comfyui-prompt.md"
 
-cp "${ROOT}/image-generation/comfyui-prompt/SERVE.md" \
-   "${ROOT}/.claude/commands/serve-examples.md"
+cp "${ROOT}/image-generation/comfyui-prompt/command-serve-output.md" \
+   "${ROOT}/.claude/commands/comfyui-serve-output.md"
 
 echo "Done. Restart Claude Code if it is already running."
