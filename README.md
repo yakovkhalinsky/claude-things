@@ -22,7 +22,7 @@ claude-things/
 │   └── install.sh             # Copy/symlink Claude Code primitives into .claude/
 ├── tools/                     # Standalone helper tools
 │   └── ol/                    # Ollama agent launcher
-│       ├── ol                 # The launcher script
+│       ├── ol                 # The launcher script (keeps itself up to date)
 │       ├── install.sh         # Install ol into ~/bin and add it to PATH
 │       └── README.md          # Human-readable docs
 └── .claude/                   # Active Claude Code files (symlinks into assets)
@@ -41,7 +41,7 @@ Then restart Claude Code.
 | Category | Asset | Description |
 |----------|-------|-------------|
 | image-generation | [`comfyui-prompt`](image-generation/comfyui-prompt/) | Build and run ComfyUI image-generation prompts from natural language |
-| tools | [`ol`](tools/ol/) | Shortcut launcher for Ollama agents |
+| tools | [`ol`](tools/ol/) | Ollama agent launcher that syncs itself from the remote repo |
 
 ## Adding a new item
 

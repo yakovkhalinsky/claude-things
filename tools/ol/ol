@@ -1,8 +1,204 @@
 #!/usr/bin/env bash
 # shortcut script for running different agents with ollama
+set -euo pipefail
 
 AGENT="${1:-claude}"
-MODEL="${2:-$(cat ~/.model 2>/dev/null)}"
+MODEL="${2:-$(cat ~/.model 2>/dev/null || true)}"
+
+# Base URL for the Ollama API, accepting OLLAMA_HOST with or without a scheme.
+OLLAMA_URL="${OLLAMA_HOST:-http://localhost:11434}"
+[[ "$OLLAMA_URL" == http* ]] || OLLAMA_URL="http://${OLLAMA_URL}"
+
+# Ask Ollama for the model's real context window. Claude Code has no catalogue
+# entry for Ollama model names, so without this it assumes 200k and warns about
+# an unrecognized model.
+context_length() {
+  local model="$1" info=""
+  info="$(curl -sS --max-time 10 "${OLLAMA_URL}/api/show" \
+    --data "$(printf '{"model":"%s"}' "$model")" 2>/dev/null || true)"
+  [[ -n "$info" ]] || return 0
+
+  if command -v jq >/dev/null 2>&1; then
+    jq -r '
+      (.model_info // {}) as $mi
+      | ($mi["general.architecture"] // "") as $arch
+      | ($mi["\($arch).context_length"]
+         // ($mi | to_entries | map(select(.key | endswith(".context_length")) | .value) | max))
+      | select(. != null and . > 0)
+    ' <<<"$info" 2>/dev/null && return 0
+  fi
+
+  # Fallback without jq: largest "<arch>.context_length" value in the payload.
+  grep -oE '"[^"]*context_length" *: *[0-9]+' <<<"$info" \
+    | grep -oE '[0-9]+$' | sort -n | tail -n 1 || true
+}
+
+# --- self-update -------------------------------------------------------------
+# Keep the installed copy in sync with the file published on the remote repo, so
+# any machine stays current from what has been pushed, even one with no checkout.
+# ~/.ol-version records "<md5>  <source>" of the last sync. Everything here is
+# best effort: a sync problem must never stop the launcher from launching, so
+# each failure is reported at most once and then ignored. New code takes effect
+# on the *next* run -- this one keeps running what it started with.
+
+ol_note() { echo "ol: $*" >&2; }
+
+# Print an md5 of a file, or fail if it cannot be read or hashed.
+ol_hash() {
+  local f="$1" out=""
+  [[ -f "$f" ]] || return 1
+  if command -v md5sum >/dev/null 2>&1; then
+    out="$(md5sum <"$f" 2>/dev/null | awk '{print $1}')" || out=""
+  elif command -v md5 >/dev/null 2>&1; then
+    out="$(md5 -q "$f" 2>/dev/null)" || out=""
+  elif command -v shasum >/dev/null 2>&1; then
+    out="$(shasum -a 256 <"$f" 2>/dev/null | awk '{print $1}')" || out=""
+  elif command -v openssl >/dev/null 2>&1; then
+    out="$(openssl dgst -md5 <"$f" 2>/dev/null)" || out=""
+    out="${out##* }"
+  fi
+  [[ -n "$out" ]] || return 1
+  printf '%s\n' "$out"
+}
+
+# A candidate may replace the launcher only if it looks like ol and parses.
+# A truncated or syntax-broken push must not be able to brick every later run.
+ol_valid() {
+  local f="$1"
+  [[ -f "$f" && -s "$f" ]] || return 1
+  grep 'ollama launch' "$f" >/dev/null 2>&1 || return 1
+  bash -n "$f" 2>/dev/null || return 1
+}
+
+# Write the version record as "<md5>  <source>", via a rename so that two
+# concurrent ol runs cannot leave a half-written line behind.
+ol_record() {
+  local vf="$1" hash="$2" src="$3"
+  printf '%s  %s\n' "$hash" "$src" >"${vf}.new.$$" 2>/dev/null || {
+    rm -f -- "${vf}.new.$$" 2>/dev/null || true
+    return 0
+  }
+  mv -f -- "${vf}.new.$$" "$vf" 2>/dev/null \
+    || rm -f -- "${vf}.new.$$" 2>/dev/null || true
+  return 0
+}
+
+ol_self_update() {
+  local home="${HOME:-}" tgt="${OL_TARGET:-}" src="${OL_SOURCE:-}"
+  local url="${OL_REMOTE_URL:-https://raw.githubusercontent.com/yakovkhalinsky/claude-things/main/tools/ol/ol}"
+  local vf="" vhash="" vsrc="" label="" oldhash="" newhash=""
+
+  if [[ "${OL_NO_UPDATE:-0}" == "1" ]]; then
+    return 0
+  fi
+  if [[ -z "$home" ]]; then
+    return 0
+  fi
+
+  tgt="${tgt:-${home}/bin/ol}"
+  vf="${home}/.ol-version"
+  # A bare "ol" as the target has no directory component; stage it beside itself.
+  local tdir="${tgt%/*}"
+  if [[ "$tdir" == "$tgt" ]]; then
+    tdir="."
+  fi
+
+  # Staged beside the target, so the rename below is a same-directory rename and
+  # never a cross-filesystem copy. Writing over the running script in place is
+  # what corrupts a concurrent run: bash reads a script incrementally, so
+  # swapping a new inode in is the safe way to replace it.
+  local tmp="${tgt}.new.$$"
+
+  if [[ -r "$vf" ]]; then
+    read -r vhash vsrc <"$vf" || true
+  fi
+
+  # Bootstrap case: nothing is installed yet and ~/bin may not even exist.
+  mkdir -p -- "$tdir" 2>/dev/null || true
+
+  # 1. An explicit local source wins and never touches the network.
+  # 2. Otherwise fetch the published file.
+  # 3. If that fails (offline, moved URL), fall back to a local checkout.
+  # 4. If none of those yields a candidate, keep the installed copy and say
+  #    nothing -- nothing here is worth nagging about on every run.
+  if [[ -n "$src" ]]; then
+    label="$src"
+  else
+    label="$url"
+    if ! curl -fsSL --connect-timeout 3 --max-time 5 -o "$tmp" -- "$url" 2>/dev/null; then
+      rm -f -- "$tmp" 2>/dev/null || true
+      local checkout="${home}/git/claude-things/tools/ol/ol"
+      if [[ -f "$checkout" ]]; then
+        src="$checkout"
+        label="$checkout"
+      else
+        return 0
+      fi
+    fi
+  fi
+
+  if [[ -n "$src" ]]; then
+    if [[ "$src" -ef "$tgt" ]]; then
+      return 0
+    fi
+    if ! cp -- "$src" "$tmp" 2>/dev/null; then
+      rm -f -- "$tmp" 2>/dev/null || true
+      ol_note "cannot read ${src}; not self-updating"
+      return 0
+    fi
+  fi
+
+  if ! ol_valid "$tmp"; then
+    rm -f -- "$tmp" 2>/dev/null || true
+    ol_note "rejected ${label}: not a usable ol script; keeping ${tgt}"
+    return 0
+  fi
+
+  newhash="$(ol_hash "$tmp")" || newhash=""
+  if [[ -z "$newhash" ]]; then
+    rm -f -- "$tmp" 2>/dev/null || true
+    ol_note "cannot hash the candidate from ${label}; not self-updating"
+    return 0
+  fi
+
+  oldhash="$(ol_hash "$tgt")" || oldhash=""
+
+  # Already current: refresh the record if it is missing or stale, then stop.
+  if [[ -n "$oldhash" && "$newhash" == "$oldhash" ]]; then
+    rm -f -- "$tmp" 2>/dev/null || true
+    if [[ "$newhash" != "$vhash" || "$label" != "$vsrc" ]]; then
+      ol_record "$vf" "$newhash" "$label"
+    fi
+    return 0
+  fi
+
+  chmod +x "$tmp" 2>/dev/null || true
+  if ! mv -f -- "$tmp" "$tgt" 2>/dev/null; then
+    rm -f -- "$tmp" 2>/dev/null || true
+    ol_note "could not replace ${tgt}; not self-updating"
+    return 0
+  fi
+
+  ol_record "$vf" "$newhash" "$label"
+  if [[ -n "$oldhash" ]]; then
+    ol_note "synced ${tgt} from ${label} (${oldhash:0:7} -> ${newhash:0:7})"
+  else
+    ol_note "installed ${tgt} from ${label} (${newhash:0:7})"
+  fi
+  return 0
+}
+
+ol_self_update || true
+
+if [[ "$AGENT" == "claude" && -n "$MODEL" && -z "${CLAUDE_CODE_MAX_CONTEXT_TOKENS:-}" ]]; then
+  CTX="$(context_length "$MODEL" || true)"
+  if [[ -n "$CTX" && "$CTX" != "null" ]]; then
+    export CLAUDE_CODE_MAX_CONTEXT_TOKENS="$CTX"
+    echo "ol: ${MODEL} context window set to ${CTX} tokens" >&2
+  else
+    echo "ol: no context window reported for ${MODEL}; Claude Code will assume 200k" >&2
+  fi
+fi
 
 # Only skip permissions for claude
 if [[ "$AGENT" == "claude" ]]; then

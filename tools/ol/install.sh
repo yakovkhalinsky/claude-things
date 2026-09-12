@@ -4,15 +4,61 @@
 
 set -euo pipefail
 
-ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-TARGET="${HOME}/bin"
+# Canonical, symlink-free paths, so the version record below names the real file.
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)"
 SCRIPT="ol"
+TARGET="${OL_TARGET:-${HOME}/bin/${SCRIPT}}"
+TARGET_DIR="${TARGET%/*}"
+[[ "${TARGET_DIR}" == "${TARGET}" ]] && TARGET_DIR="."
 
-mkdir -p "${TARGET}"
-cp "${ROOT}/${SCRIPT}" "${TARGET}/${SCRIPT}"
-chmod +x "${TARGET}/${SCRIPT}"
+mkdir -p "${TARGET_DIR}"
 
-echo "Installed ${TARGET}/${SCRIPT}"
+# Install via a rename rather than an in-place copy: bash reads a script
+# incrementally, so writing over a running ol can make it execute a spliced
+# region. Swapping a new inode in cannot.
+TMP="${TARGET}.new.$$"
+cp -- "${ROOT}/${SCRIPT}" "${TMP}"
+chmod +x "${TMP}"
+mv -f -- "${TMP}" "${TARGET}"
+
+echo "Installed ${TARGET}"
+
+# Seed the version record that ol maintains, so the first run does not report a
+# spurious sync. ol re-derives this hash itself; see ol_self_update in the script.
+VERSION="${HOME}/.ol-version"
+
+hash_file() {
+  local f="$1" out=""
+  if command -v md5sum >/dev/null 2>&1; then
+    out="$(md5sum <"${f}" 2>/dev/null | awk '{print $1}')" || out=""
+  elif command -v md5 >/dev/null 2>&1; then
+    out="$(md5 -q "${f}" 2>/dev/null)" || out=""
+  elif command -v shasum >/dev/null 2>&1; then
+    out="$(shasum -a 256 <"${f}" 2>/dev/null | awk '{print $1}')" || out=""
+  elif command -v openssl >/dev/null 2>&1; then
+    out="$(openssl dgst -md5 <"${f}" 2>/dev/null)" || out=""
+    out="${out##* }"
+  fi
+  [[ -n "${out}" ]] || return 1
+  printf '%s\n' "${out}"
+}
+
+H="$(hash_file "${TARGET}")" || H=""
+if [[ -n "${H}" ]] && printf '%s  %s\n' "${H}" "${ROOT}/${SCRIPT}" >"${VERSION}.new.$$" 2>/dev/null; then
+  mv -f -- "${VERSION}.new.$$" "${VERSION}"
+  echo "Recorded ${VERSION}"
+else
+  rm -f -- "${VERSION}.new.$$" 2>/dev/null || true
+  echo "Could not record ${VERSION}; ol will write it on its first run."
+fi
+
+# A custom target is not necessarily on PATH, and we should not edit rc files
+# for a directory the user chose deliberately.
+if [[ "${TARGET_DIR}" != "${HOME}/bin" ]]; then
+  echo "Skipping PATH setup: ${TARGET_DIR} is not ~/bin. Make sure it is on PATH."
+  echo "Done."
+  exit 0
+fi
 
 # Determine the right shell rc file.
 RC=""
