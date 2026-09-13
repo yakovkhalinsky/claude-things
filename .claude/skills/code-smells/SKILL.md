@@ -1,0 +1,1 @@
+../../../code-quality/code-smells/SKILL.md

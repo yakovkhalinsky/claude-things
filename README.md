@@ -15,6 +15,11 @@ claude-things/
 │       ├── command.md         # Slash command
 │       ├── workflows/         # Supporting files
 │       └── examples/          # Generated outputs (ignored by git)
+├── code-quality/              # Category
+│   └── code-smells/           # Asset
+│       ├── README.md          # Human-readable docs
+│       ├── SKILL.md           # Claude Code skill (Fowler's 24 smells)
+│       └── code-smells.md     # Slash command
 ├── agents/                    # Cross-cutting primitives (placeholder)
 ├── prompts/
 ├── mcp/
@@ -41,6 +46,7 @@ Then restart Claude Code.
 | Category | Asset | Description |
 |----------|-------|-------------|
 | image-generation | [`comfyui-prompt`](image-generation/comfyui-prompt/) | Build and run ComfyUI image-generation prompts from natural language |
+| code-quality | [`code-smells`](code-quality/code-smells/) | Catalogue of Martin Fowler's 24 code smells, with symptoms and treatments |
 | tools | [`ol`](tools/ol/) | Ollama agent launcher that syncs itself from the remote repo |
 
 ## Adding a new item

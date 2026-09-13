@@ -11,15 +11,22 @@ ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 echo "Installing Claude Code primitives from ${ROOT}..."
 
 mkdir -p "${ROOT}/.claude/skills/comfyui-prompt"
+mkdir -p "${ROOT}/.claude/skills/code-smells"
 mkdir -p "${ROOT}/.claude/commands"
 
 cp "${ROOT}/image-generation/comfyui-prompt/SKILL.md" \
    "${ROOT}/.claude/skills/comfyui-prompt/SKILL.md"
+
+cp "${ROOT}/code-quality/code-smells/SKILL.md" \
+   "${ROOT}/.claude/skills/code-smells/SKILL.md"
 
 cp "${ROOT}/image-generation/comfyui-prompt/comfyui-prompt.md" \
    "${ROOT}/.claude/commands/comfyui-prompt.md"
 
 cp "${ROOT}/image-generation/comfyui-prompt/command-serve-output.md" \
    "${ROOT}/.claude/commands/comfyui-serve-output.md"
+
+cp "${ROOT}/code-quality/code-smells/code-smells.md" \
+   "${ROOT}/.claude/commands/code-smells.md"
 
 echo "Done. Restart Claude Code if it is already running."
