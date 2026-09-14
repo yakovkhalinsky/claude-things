@@ -58,7 +58,7 @@ Every run must respect the user's choice for the random seed:
    - **"last" / reuse / blank / default** → use the recalled seed.
    - **A specific number** → use that number and remember it as `comfyui_last_seed`.
    - **"random" / "new"** → generate a new random positive 32-bit integer, use it, and remember it as `comfyui_last_seed`.
-4. After the run succeeds, call `mcp__eden-memory__eden_remember` to store `comfyui_last_seed` with the seed actually used.
+4. After the run succeeds, call `mcp__memory__memory_remember` to store `comfyui_last_seed` with the seed actually used.
 
 If no previous seed exists, generate a random one and tell the user what was chosen.
 

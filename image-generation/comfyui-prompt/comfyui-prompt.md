@@ -5,8 +5,8 @@ allowed-tools:
   - Bash
   - Read
   - Write
-  - mcp__eden-memory__eden_recall
-  - mcp__eden-memory__eden_remember
+  - mcp__memory__memory_recall
+  - mcp__memory__memory_remember
 ---
 
 # /comfyui-prompt
@@ -16,7 +16,7 @@ Generate a ComfyUI API prompt from the user's description and submit it to the c
 ## Steps
 
 1. Parse `$ARGUMENTS` as the image-generation request. If empty, ask the user what they want to generate.
-2. **Recall the last seed** by calling `mcp__eden-memory__eden_recall` with query `comfyui_last_seed`.
+2. **Recall the last seed** by calling `mcp__memory__memory_recall` with query `comfyui_last_seed`.
 3. Ask the user:
    - "Last seed was **<last-seed>**. Use [last], enter a new seed, or [random]?"
    - If no last seed exists, say: "No previous seed. I'll use a random seed unless you enter one."
@@ -57,7 +57,7 @@ Generate a ComfyUI API prompt from the user's description and submit it to the c
     - `prompt_id` and queue number.
     - Final status and output file names.
     - Any errors encountered.
-13. After a successful run, call `mcp__eden-memory__eden_remember` with `comfyui_last_seed` set to the seed actually used.
+13. After a successful run, call `mcp__memory__memory_remember` with `comfyui_last_seed` set to the seed actually used.
 
 ## Example interaction
 
