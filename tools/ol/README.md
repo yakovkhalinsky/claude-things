@@ -13,6 +13,64 @@ ol [agent] [model]
 
 For the `claude` agent, permissions are skipped automatically via `--dangerously-skip-permissions`.
 
+## Tab completion
+
+`ol` ships tab completion for bash and zsh: `ol <TAB>` completes the integration,
+`ol <agent> <TAB>` completes model names.
+
+```
+ol <TAB>          # claude, chatgpt, codex-app, opencode, ...
+ol claude <TAB>   # deepseek-v4.1-flash:cloud, gpt-oss:20b, ...
+```
+
+Integrations are read from `ollama launch --help`, so the list follows whatever
+Ollama ships, aliases included, with a built-in list as the fallback when `ollama`
+is not installed. Models merge four sources, in the order they are offered:
+
+1. `~/.model` — the current default, i.e. what a bare `ol` launches
+2. models Ollama is **running** right now (`/api/ps`)
+3. `~/.ol-models` — models `ol` has launched before, most recent first
+4. models **pulled** locally (`/api/tags`)
+
+Sources 1 and 3 are local, which is what makes a cloud model completable at all:
+`/api/tags` lists nothing unless a model was pulled, and `/api/ps` only ever shows
+what is running. `ol` records each model it launches in `~/.ol-models`
+(deduplicated, capped at 50, written via a rename) *before* launching, so a session
+started in one terminal can be completed in another while it runs. A mistyped model
+is remembered too; delete the file to forget.
+
+`/api/ps` and `/api/tags` answers are cached in `~/.ol-completion-cache` for
+`OL_COMP_TTL` seconds (default 60). With `OLLAMA_HOST` pointing at a remote Ollama,
+a round trip on every Tab would be felt, so the cache is deliberate; a *failed*
+lookup is cached too, which means a dead host costs at most one short timeout per
+TTL. Delete the file to force a refresh. Completion never prints: every request has
+a short timeout, every failure is swallowed, and a Tab with no answer still offers
+the local candidates.
+
+| Variable | Effect |
+| --- | --- |
+| `OL_COMP_TTL` | Seconds a cached `/api/ps` + `/api/tags` answer stays fresh (default 60) |
+| `OL_COMPLETION_SYNC=1` | Re-fetch the completion file even when it is unchanged |
+
+The completion is wired up only for the default `~/bin` install: a custom
+`OL_TARGET` skips the rc edits, and so does this. `ol` never edits a shell rc file
+— the sourcing line, guarded so a missing file is not an error, is `install.sh`'s:
+
+```bash
+[ -r "${HOME}/.ol-completion.bash" ] && . "${HOME}/.ol-completion.bash"
+```
+
+The bash completion carries one piece of readline folklore worth knowing: with the
+default `COMP_WORDBREAKS`, `:` is a word-break character, so readline sees
+`deepseek-v4.1-flash:cl` as the complete prefix `deepseek-v4.1-flash:` plus the word
+`cl`. The completion replies with the remainder only (`cloud`), because readline
+replaces only the part after its last break character. zsh needs the same treatment
+by a different route, since `:` is not in `WORDCHARS`.
+
+**The zsh completion has had less exercise than the bash one**: it was developed on
+a machine with no zsh installed, so it is written to the standard pattern but not
+keystroke-tested.
+
 ## Keeping itself up to date
 
 The installed `ol` syncs itself on every run against the file published on
@@ -41,13 +99,20 @@ ol: synced ~/bin/ol from https://raw.githubusercontent.com/... (07f6c62 -> 9c1f3
 - **Changes ship only once they are committed and pushed to `main`.** Uncommitted
   local edits are not the reference and will be replaced in `~/bin` by whatever
   `main` holds — use `OL_SOURCE` while developing.
+- The shell completion is synced on the same schedule: when `ol` is installed or
+  updated, or when the completion file is missing. Never on every run — the steady
+  state is one file test and no network. A push that changes *only* the completion
+  file is therefore not picked up until `ol` itself next changes; set
+  `OL_COMPLETION_SYNC=1` for that run, or re-run `install.sh`. The *lists* never go
+  stale either way: they are computed at Tab time, not stored in the synced file.
 
 | Variable | Effect |
 | --- | --- |
 | `OL_SOURCE` | Use this local file as the reference and never touch the network |
-| `OL_REMOTE_URL` | Fetch the reference from here instead (default: the raw `main` URL). Point it at a commit SHA path (`.../<sha>/tools/ol/ol`) to pin a version, or at a fork |
+| `OL_REMOTE_URL` | Fetch the reference from here instead (default: the raw `main` URL). Point it at a commit SHA path (`.../<sha>/tools/ol/ol`) to pin a version, or at a fork. The completion is fetched from beside it, so this pins both |
 | `OL_TARGET` | Install to this path instead of `~/bin/ol` |
-| `OL_NO_UPDATE=1` | Skip the sync entirely |
+| `OL_NO_UPDATE=1` | Skip the sync entirely, the completion included |
+| `OL_COMPLETION_SYNC=1` | Sync the completion even when `ol` itself is unchanged |
 
 Be aware that this installs and runs whatever is on `main` on every run, and
 that `ol` then launches `claude` with `--dangerously-skip-permissions`. The
@@ -86,9 +151,13 @@ window.
 ```
 
 This installs `ol` into `~/bin` (via a rename, so it is safe to run while `ol`
-is in use), records `~/.ol-version`, and adds `~/bin` to your shell PATH if it
+is in use), records `~/.ol-version`, installs the completion file for your shell
+and adds a guarded line sourcing it, and adds `~/bin` to your shell PATH if it
 isn't already there. Set `OL_TARGET` to install somewhere else — the PATH setup
-is then skipped, since a deliberately chosen directory is not ours to edit rc
-files for.
+and the completion are then skipped, since a deliberately chosen directory is not
+ours to edit rc files for.
+
+Re-run it once on a machine that installed `ol` before completion existed: `ol`
+keeps a completion file current, but it will not add the rc line that sources it.
 
 Installing is only needed once: after that `ol` keeps itself current.

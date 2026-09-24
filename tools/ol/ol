@@ -179,6 +179,10 @@ ol_self_update() {
     return 0
   fi
 
+  # Tell the caller below that this run installed or replaced the launcher, which
+  # is one of the two triggers for re-fetching the shell completion.
+  OL_UPDATED=1
+
   ol_record "$vf" "$newhash" "$label"
   if [[ -n "$oldhash" ]]; then
     ol_note "synced ${tgt} from ${label} (${oldhash:0:7} -> ${newhash:0:7})"
@@ -188,7 +192,221 @@ ol_self_update() {
   return 0
 }
 
+# --- completion --------------------------------------------------------------
+# ~/.ol-completion.<shell> is sourced by the shell rc (install.sh adds the line)
+# and is kept current here on the same schedule as the launcher itself: when ol is
+# installed or updated, when the file is missing, or when OL_COMPLETION_SYNC=1
+# asks for it. Never on every run -- the steady state below is one stat() and no
+# network -- and ol never edits a user's rc file itself, only the file that line
+# points at.
+#
+# It is fetched from the same directory as ol's own reference (a sibling of
+# OL_SOURCE, or of OL_REMOTE_URL), so the two variables that pin the launcher pin
+# the completion with it.
+
+# A candidate may replace a completion file only if it looks like one and parses
+# for its shell. This is ol_valid's counterpart and deliberately not ol_valid: a
+# completion file contains no "ollama launch", and it is sourced rather than
+# executed, so a syntax error would surface as an error on every Tab instead of as
+# a failed launch.
+ol_completion_valid() {
+  local f="$1" shellname="$2"
+  [[ -f "$f" && -s "$f" ]] || return 1
+  # The marker comment both completion files start with, plus the registration
+  # call for their shell: neither string appears in ol itself.
+  grep -qF '# ol-completion:' "$f" 2>/dev/null || return 1
+  if [[ "$shellname" == "zsh" ]]; then
+    grep -qF 'compdef _ol ol' "$f" 2>/dev/null || return 1
+    # Checked only when there is a zsh to check with: bash -n would pass on a zsh
+    # file and prove nothing about it.
+    if command -v zsh >/dev/null 2>&1; then
+      zsh -n "$f" 2>/dev/null || return 1
+    fi
+  else
+    grep -qE 'complete .*-F _ol ol' "$f" 2>/dev/null || return 1
+    bash -n "$f" 2>/dev/null || return 1
+  fi
+  return 0
+}
+
+ol_completion_sync() {
+  local home="${HOME:-}" suffix="" comp="" rc="" notice=""
+  local src="${OL_SOURCE:-}" url="" label="" tmp="" tdir="" checkout=""
+  local newhash="" oldhash=""
+
+  [[ -n "$home" ]] || return 0
+  # OL_NO_UPDATE skips the sync entirely, this part included.
+  if [[ "${OL_NO_UPDATE:-0}" == "1" ]]; then
+    return 0
+  fi
+
+  # Which completion to keep current: the shell ol was run from. SHELL can be
+  # unset (cron, some launchers), and then the rc line itself says which shell is
+  # in use -- a line ol never adds, only follows.
+  case "${SHELL##*/}" in
+    bash|zsh) suffix="${SHELL##*/}" ;;
+  esac
+  if [[ -z "$suffix" ]]; then
+    if grep -qF 'ol-completion.bash' "${home}/.bashrc" 2>/dev/null; then
+      suffix="bash"
+    elif grep -qF 'ol-completion.zsh' "${home}/.zshrc" 2>/dev/null; then
+      suffix="zsh"
+    fi
+  fi
+  [[ -n "$suffix" ]] || return 0
+
+  comp="${home}/.ol-completion.${suffix}"
+  rc="${home}/.${suffix}rc"
+  notice="${home}/.ol-completion-notice"
+  tmp="${comp}.new.$$"
+
+  # 1. Steady state: the file is there and ol did not change. This is the entire
+  #    cost of this function on a normal run. OL_UPDATED is initialised to 0 and
+  #    set to 1 by ol_self_update, so it is compared, never tested for emptiness.
+  if [[ -f "$comp" && "${OL_UPDATED:-0}" != "1" && "${OL_COMPLETION_SYNC:-0}" != "1" ]]; then
+    return 0
+  fi
+  # 2. A missing file is fetched at most once between ol updates, so an unreachable
+  #    network cannot put a timeout in front of every launch.
+  if [[ ! -f "$comp" && -f "$notice" && "${OL_UPDATED:-0}" != "1" ]]; then
+    return 0
+  fi
+  # 3. The sourcing line is install.sh's business. No line, nothing to keep
+  #    current -- mention it once (the notice is that "once") and stop.
+  if ! grep -qF "ol-completion.${suffix}" "$rc" 2>/dev/null; then
+    if [[ ! -f "$notice" ]]; then
+      ol_note "tab completion is available; re-run tools/ol/install.sh to enable it"
+      : >"$notice" 2>/dev/null || true
+    fi
+    return 0
+  fi
+
+  # 4. Same source rules as ol's own sync: an explicit local source wins and never
+  #    touches the network, otherwise fetch, and a failed fetch falls back to the
+  #    local checkout. Timeouts are tighter than ol's own, so that two syncs in one
+  #    run cannot add up to ten seconds.
+  url="${OL_REMOTE_URL:-https://raw.githubusercontent.com/yakovkhalinsky/claude-things/main/tools/ol/ol}"
+  url="${url%/*}/ol-completion.${suffix}"
+
+  # Past the gates, so the attempt is happening: clear the previous verdict and
+  # record a new one if this one fails.
+  rm -f -- "$notice" 2>/dev/null || true
+
+  if [[ -n "$src" ]]; then
+    # A bare filename has no directory component; stage it beside itself, the way
+    # ol_self_update guards its own target directory.
+    tdir="${src%/*}"
+    [[ "$tdir" == "$src" ]] && tdir="."
+    src="${tdir}/ol-completion.${suffix}"
+    [[ -f "$src" ]] || return 0
+    label="$src"
+    if ! cp -- "$src" "$tmp" 2>/dev/null; then
+      rm -f -- "$tmp" 2>/dev/null || true
+      ol_note "cannot read ${src}; tab completion not synced"
+      return 0
+    fi
+  else
+    label="$url"
+    if ! curl -fsSL --connect-timeout 2 --max-time 4 -o "$tmp" -- "$url" 2>/dev/null; then
+      rm -f -- "$tmp" 2>/dev/null || true
+      checkout="${home}/git/claude-things/tools/ol/ol-completion.${suffix}"
+      if [[ -f "$checkout" ]]; then
+        label="$checkout"
+        if ! cp -- "$checkout" "$tmp" 2>/dev/null; then
+          rm -f -- "$tmp" 2>/dev/null || true
+          : >"$notice" 2>/dev/null || true
+          return 0
+        fi
+      else
+        # Nothing to be had; remember the attempt so the next run does not wait
+        # again (step 2 above).
+        : >"$notice" 2>/dev/null || true
+        return 0
+      fi
+    fi
+  fi
+
+  if ! ol_completion_valid "$tmp" "$suffix"; then
+    rm -f -- "$tmp" 2>/dev/null || true
+    ol_note "rejected ${label}: not a usable ${suffix} completion; keeping ${comp}"
+    : >"$notice" 2>/dev/null || true
+    return 0
+  fi
+
+  newhash="$(ol_hash "$tmp")" || newhash=""
+  if [[ -z "$newhash" ]]; then
+    rm -f -- "$tmp" 2>/dev/null || true
+    ol_note "cannot hash the completion from ${label}; not syncing it"
+    return 0
+  fi
+  oldhash="$(ol_hash "$comp")" || oldhash=""
+
+  # Unchanged content: drop the candidate and say nothing. This is what keeps an ol
+  # update that does not touch the completion quiet, and what avoids a pointless
+  # rename on every update.
+  if [[ -n "$oldhash" && "$newhash" == "$oldhash" ]]; then
+    rm -f -- "$tmp" 2>/dev/null || true
+    return 0
+  fi
+
+  # Sourced, not executed: no chmod. Renamed in, so a shell reading the file while
+  # another ol replaces it can never see a spliced copy.
+  if ! mv -f -- "$tmp" "$comp" 2>/dev/null; then
+    rm -f -- "$tmp" 2>/dev/null || true
+    ol_note "could not replace ${comp}; tab completion left as it was"
+    return 0
+  fi
+  if [[ -n "$oldhash" ]]; then
+    ol_note "synced ${comp} from ${label} (${oldhash:0:7} -> ${newhash:0:7})"
+  else
+    ol_note "installed ${comp} from ${label} (${newhash:0:7})"
+  fi
+  return 0
+}
+
+# Remember the model about to be launched, so it completes next time. Cloud models
+# are not discoverable any other way: absent from /api/tags unless pulled, and
+# /api/ps only ever lists what is running right now. Recorded *before* the launch,
+# so a session started in one terminal is completable in another while it runs; the
+# cost is that a mistyped model is remembered too, which the deduplication and the
+# cap below keep from mattering. Best effort in every direction: an unwritable HOME
+# or a full disk must not delay or fail a launch.
+ol_remember_model() {
+  local home="${HOME:-}" f="" tmp="" line="" n=0
+  [[ -n "$home" && -n "${MODEL:-}" ]] || return 0
+  f="${home}/.ol-models"
+
+  # Already the most recent entry: nothing to rewrite.
+  if [[ -r "$f" ]]; then
+    read -r line <"$f" || line=""
+    [[ "$line" == "$MODEL" ]] && return 0
+  fi
+
+  tmp="${f}.new.$$"
+  {
+    printf '%s\n' "$MODEL"
+    # n counts what has been written, this line included, so the file holds at most
+    # 50 entries.
+    n=1
+    if [[ -r "$f" ]]; then
+      while IFS= read -r line; do
+        [[ -n "$line" && "$line" != "$MODEL" ]] || continue
+        printf '%s\n' "$line"
+        n=$(( n + 1 ))
+        if (( n >= 50 )); then
+          break
+        fi
+      done <"$f"
+    fi
+  } >"$tmp" 2>/dev/null || { rm -f -- "$tmp" 2>/dev/null || true; return 0; }
+  mv -f -- "$tmp" "$f" 2>/dev/null || rm -f -- "$tmp" 2>/dev/null || true
+  return 0
+}
+
+# ol_self_update sets this when it installs or replaces the launcher.
+OL_UPDATED=0
 ol_self_update || true
+ol_completion_sync || true
 
 if [[ "$AGENT" == "claude" && -n "$MODEL" && -z "${CLAUDE_CODE_MAX_CONTEXT_TOKENS:-}" ]]; then
   CTX="$(context_length "$MODEL" || true)"
@@ -212,5 +430,9 @@ CMD="ollama launch ${AGENT} ${POST}"
 if [[ -n "$MODEL" ]]; then
   CMD="ollama launch ${AGENT} --model ${MODEL} ${POST}"
 fi
+
+# Record the model first, then launch: the exit status of the eval is still the
+# script's status, so nothing here can change what a caller sees.
+ol_remember_model || true
 
 eval "$CMD"

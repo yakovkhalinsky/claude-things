@@ -28,6 +28,9 @@ claude-things/
 ├── tools/                     # Standalone helper tools
 │   └── ol/                    # Ollama agent launcher
 │       ├── ol                 # The launcher script (keeps itself up to date)
+│       ├── ol-completion.bash # Bash tab completion (kept in sync by ol)
+│       ├── ol-completion.zsh  # Zsh tab completion (kept in sync by ol)
+│       ├── test-completion.sh # Drives the bash completion without a tty
 │       ├── install.sh         # Install ol into ~/bin and add it to PATH
 │       └── README.md          # Human-readable docs
 └── .claude/                   # Active Claude Code files (symlinks into assets)
@@ -47,7 +50,7 @@ Then restart Claude Code.
 |----------|-------|-------------|
 | image-generation | [`comfyui-prompt`](image-generation/comfyui-prompt/) | Build and run ComfyUI image-generation prompts from natural language |
 | code-quality | [`code-smells`](code-quality/code-smells/) | Catalogue of Martin Fowler's 24 code smells, with symptoms and treatments |
-| tools | [`ol`](tools/ol/) | Ollama agent launcher that syncs itself from the remote repo |
+| tools | [`ol`](tools/ol/) | Ollama agent launcher that syncs itself from the remote repo, with bash/zsh tab completion |
 
 ## Adding a new item
 
