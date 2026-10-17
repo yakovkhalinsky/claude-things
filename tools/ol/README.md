@@ -5,13 +5,43 @@ A tiny shortcut for launching Ollama agents.
 ## Usage
 
 ```bash
-ol [agent] [model]
+ol [agent] [model] [--] [agent args...]
 ```
 
 - `agent` defaults to `claude`
-- `model` defaults to the contents of `~/.model`
+- `model` defaults to the contents of `~/.model` (an empty `""` also means "use `~/.model`")
+- everything after `--`, or from the first argument starting with `-` once the
+  agent is known, is passed to the agent unchanged
 
-For the `claude` agent, permissions are skipped automatically via `--dangerously-skip-permissions`.
+```bash
+ol                                   # claude, model from ~/.model, interactive
+ol codex                             # another integration
+ol claude gpt-oss:20b                # pick the model
+ol claude -- -p "brief" --output-format json --allowedTools Read "Bash(ls:*)"
+ol claude gpt-oss:20b -p "$(cat brief.md)" --output-format json
+```
+
+`ol` runs `exec ollama launch <agent> [--model <model>] -y [-- <args>]`: no
+`eval`, so arguments with spaces, quotes or `$(...)` arrive as single, literal
+arguments, and the agent's exit status is `ol`'s exit status.
+
+### Permissions
+
+`--dangerously-skip-permissions` is only ever added for `claude`:
+
+| Situation | Skip permissions? |
+| --- | --- |
+| Interactive launch: stdin is a terminal and no arguments are passed through | **yes** (the old default) |
+| Any pass-through arguments (`ol claude -- -p ...`) | no |
+| stdin is not a terminal (pipe, `< /dev/null`, cron, tmux with redirected stdin) | no |
+| `OL_SKIP_PERMISSIONS=1` | yes, always (claude only) |
+| `OL_SKIP_PERMISSIONS=0` | no, never |
+
+Headless runs therefore get Claude Code's normal permission handling, so
+`--allowedTools`, `--disallowedTools` and `--permission-mode` mean what they say,
+and a tool that needs approval shows up in the JSON result's
+`permission_denials` instead of running. Any other value of
+`OL_SKIP_PERMISSIONS` is reported and treated as "don't skip".
 
 ## Tab completion
 
@@ -113,9 +143,10 @@ ol: synced ~/bin/ol from https://raw.githubusercontent.com/... (07f6c62 -> 9c1f3
 | `OL_TARGET` | Install to this path instead of `~/bin/ol` |
 | `OL_NO_UPDATE=1` | Skip the sync entirely, the completion included |
 | `OL_COMPLETION_SYNC=1` | Sync the completion even when `ol` itself is unchanged |
+| `OL_SKIP_PERMISSIONS=0\|1` | Force `--dangerously-skip-permissions` off or on for `claude` (see [Permissions](#permissions)) |
 
 Be aware that this installs and runs whatever is on `main` on every run, and
-that `ol` then launches `claude` with `--dangerously-skip-permissions`. The
+that an interactive `ol` then launches `claude` with `--dangerously-skip-permissions`. The
 `bash -n` and sanity checks blunt accidents such as a truncated or
 syntax-broken push, not malice.
 

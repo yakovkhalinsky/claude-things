@@ -2,8 +2,31 @@
 # shortcut script for running different agents with ollama
 set -euo pipefail
 
-AGENT="${1:-claude}"
-MODEL="${2:-$(cat ~/.model 2>/dev/null || true)}"
+# Usage: ol [agent] [model] [--] [agent args...]
+#
+#   ol                                  claude, model from ~/.model
+#   ol <agent>                          that agent, model from ~/.model
+#   ol <agent> <model>                  that agent and model
+#   ol [agent [model]] -- <args...>     ...and pass <args...> straight to the agent
+#
+# Pass-through also starts at the first argument that begins with "-" once the
+# agent is known, so `ol claude -p "brief"` works without the `--`. An empty
+# model ("") means "use ~/.model", e.g. `ol claude "" -p "brief"`.
+AGENT="claude"
+MODEL=""
+if [[ $# -gt 0 && "$1" != "--" ]]; then
+  AGENT="${1:-claude}"
+  shift
+  if [[ $# -gt 0 && "$1" != "--" && "$1" != -* ]]; then
+    MODEL="$1"
+    shift
+  fi
+fi
+if [[ $# -gt 0 && "$1" == "--" ]]; then
+  shift
+fi
+# Whatever is left in "$@" goes to the agent untouched.
+MODEL="${MODEL:-$(cat ~/.model 2>/dev/null || true)}"
 
 # Base URL for the Ollama API, accepting OLLAMA_HOST with or without a scheme.
 OLLAMA_URL="${OLLAMA_HOST:-http://localhost:11434}"
@@ -418,21 +441,47 @@ if [[ "$AGENT" == "claude" && -n "$MODEL" && -z "${CLAUDE_CODE_MAX_CONTEXT_TOKEN
   fi
 fi
 
-# Only skip permissions for claude
-if [[ "$AGENT" == "claude" ]]; then
-  POST="-y -- --dangerously-skip-permissions"
-else
-  POST="-y"
+# --- permissions -------------------------------------------------------------
+# --dangerously-skip-permissions is only ever added for claude, and by default
+# only for the classic interactive launch: stdin is a terminal and no arguments
+# are passed through. A headless or scripted run (`ol claude -- -p ...`, a pipe,
+# tmux with stdin redirected) gets Claude Code's normal permission handling, so
+# --allowedTools / --disallowedTools / --permission-mode mean what they say.
+# OL_SKIP_PERMISSIONS=1 forces the flag on, OL_SKIP_PERMISSIONS=0 forces it off.
+skip_permissions=0
+case "${OL_SKIP_PERMISSIONS:-}" in
+  1) skip_permissions=1 ;;
+  0) skip_permissions=0 ;;
+  "")
+    if [[ $# -eq 0 && -t 0 ]]; then
+      skip_permissions=1
+    fi
+    ;;
+  *)
+    ol_note "OL_SKIP_PERMISSIONS must be 0 or 1 (got '${OL_SKIP_PERMISSIONS}'); not skipping permissions"
+    ;;
+esac
+if [[ "$AGENT" != "claude" ]]; then
+  if [[ "${OL_SKIP_PERMISSIONS:-}" == "1" ]]; then
+    ol_note "OL_SKIP_PERMISSIONS=1 only applies to claude; ignoring it for ${AGENT}"
+  fi
+  skip_permissions=0
 fi
 
-CMD="ollama launch ${AGENT} ${POST}"
-
-if [[ -n "$MODEL" ]]; then
-  CMD="ollama launch ${AGENT} --model ${MODEL} ${POST}"
+# Arguments for the agent itself, after ollama's own `--`.
+agent_args=()
+if [[ "$skip_permissions" == "1" ]]; then
+  agent_args+=(--dangerously-skip-permissions)
+fi
+if [[ $# -gt 0 ]]; then
+  agent_args+=("$@")
 fi
 
-# Record the model first, then launch: the exit status of the eval is still the
-# script's status, so nothing here can change what a caller sees.
+# Record the model first, then launch. exec keeps the agent's exit status as
+# ol's own, and every value stays a single argument: no eval, no word splitting.
 ol_remember_model || true
 
-eval "$CMD"
+if [[ ${#agent_args[@]} -gt 0 ]]; then
+  exec ollama launch "$AGENT" ${MODEL:+--model "$MODEL"} -y -- "${agent_args[@]}"
+fi
+exec ollama launch "$AGENT" ${MODEL:+--model "$MODEL"} -y
